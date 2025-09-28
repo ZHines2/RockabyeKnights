@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Rockabye Knights — Vertical Prototype</title>
+<style>
+  :root{
+    --bg:#0b0f14; --ink:#e9f2ff; --muted:#9aa7b3; --panel:#121824; --accent:#76a7ff;
+    --good:#34d399; --warn:#fbbf24; --bad:#f87171; --line:#233047;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.4 ui-monospace, Menlo, Consolas, monospace;}
+  .wrap{position:relative; margin:0 auto; height:100vh; max-width:520px;
+    background:linear-gradient(#0b0f14,#0c121c);}
+  canvas{display:block; width:100%; height:100%; touch-action:none; background:#0a101a;}
+  /* HUD */
+  .hud{position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column;}
+  .topbar{display:flex; gap:8px; padding:8px; align-items:center; justify-content:space-between;}
+  .pill{pointer-events:auto; background:rgba(255,255,255,.06); border:1px solid var(--line);
+    border-radius:999px; padding:6px 10px; color:var(--ink); user-select:none}
+  .stat{display:flex; align-items:center; gap:6px;}
+  .bar{width:120px;height:8px;border:1px solid var(--line); border-radius:6px; overflow:hidden}
+  .bar > i{display:block;height:100%;}
+  .hp   > i{background:linear-gradient(90deg,#34d399,#059669);}
+  .combo> i{background:linear-gradient(90deg,#76a7ff,#22d3ee);}
+  .pause{cursor:pointer}
+  /* Touch controls */
+  .controls{pointer-events:none; position:absolute; inset:0;}
+  .joy, .buttons{position:absolute; bottom:18px; display:flex; align-items:center;}
+  .joy{left:18px;}
+  .buttons{right:18px; gap:16px;}
+  .stick{pointer-events:auto; width:120px; height:120px; border-radius:50%;
+    background:rgba(255,255,255,.05); border:1px solid var(--line); position:relative;}
+  .knob{position:absolute; width:50px;height:50px;border-radius:50%;
+    left:50%; top:50%; transform:translate(-50%,-50%);
+    background:rgba(255,255,255,.15); border:1px solid var(--line);}
+  .btn{pointer-events:auto; width:72px;height:72px;border-radius:50%;
+    background:rgba(255,255,255,.08); border:1px solid var(--line);
+    display:grid; place-items:center; user-select:none;}
+  .btn b{font-size:18px; opacity:.9}
+  .hint{position:absolute; bottom:150px; right:18px; color:var(--muted); font-size:12px;}
+  /* Overlay messages */
+  .center{position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;}
+  .msg{background:rgba(0,0,0,.4); border:1px solid var(--line); padding:10px 14px; border-radius:8px;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="450" height="800"></canvas>
+
+    <div class="hud">
+      <div class="topbar">
+        <div class="stat">
+          <span class="pill">KOs <b id="ko">0</b></span>
+          <span class="pill">Wave <b id="wave">1</b></span>
+          <span class="pill">FPS <b id="fps">60</b></span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center">
+          <span class="pill stat">
+            HP
+            <span class="bar hp"><i id="hpbar" style="width:100%"></i></span>
+          </span>
+          <span class="pill stat">
+            Combo
+            <span class="bar combo"><i id="combobar" style="width:0%"></i></span>
+          </span>
+          <span id="pause" class="pill pause" title="P">⏸ Pause</span>
+        </div>
+      </div>
+      <div class="center" id="overlay" hidden>
+        <div class="msg" id="overlayText">Paused</div>
+      </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div class="controls">
+      <div class="joy">
+        <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+      </div>
+      <div class="buttons">
+        <div class="btn" id="btnA" title="Attack (J)"><b>A</b></div>
+        <div class="btn" id="btnB" title="Dash (K)"><b>B</b></div>
+      </div>
+      <div class="hint">J = Attack • K = Dash • P = Pause</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ===== Canvas & Timing =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1)); // cap for perf
+  function resize() {
+    // Keep portrait aspect (450x800 logical), scale with DPR for crispness
+    const { clientWidth, clientHeight } = canvas;
+    canvas.width  = Math.round(450 * DPR);
+    canvas.height = Math.round(800 * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0); // draw in logical units
+  }
+  const ro = new ResizeObserver(resize);
+  ro.observe(canvas);
+
+  // ===== UI Elements =====
+  const elKO = document.getElementById('ko');
+  const elWave = document.getElementById('wave');
+  const elFPS = document.getElementById('fps');
+  const elHP = document.getElementById('hpbar');
+  const elCombo = document.getElementById('combobar');
+  const pauseBtn = document.getElementById('pause');
+  const overlay = document.getElementById('overlay');
+  const overlayText = document.getElementById('overlayText');
+
+  // ===== Input (Keyboard) =====
+  const keys = new Set();
+  window.addEventListener('keydown', e=>{
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d','W','A','S','D'].includes(e.key)) e.preventDefault();
+    keys.add(e.key.toLowerCase());
+    if (e.key.toLowerCase()==='p') togglePause();
+    if (e.key.toLowerCase()==='j') pressAttack();
+    if (e.key.toLowerCase()==='k') pressDash();
+  });
+  window.addEventListener('keyup', e=> keys.delete(e.key.toLowerCase()));
+
+  // ===== Input (Touch Joystick + Buttons) =====
+  const stick = document.getElementById('stick');
+  const knob  = document.getElementById('knob');
+  const btnA  = document.getElementById('btnA');
+  const btnB  = document.getElementById('btnB');
+
+  let joyActive = false, joyDX = 0, joyDY = 0;
+  function joyFromEvent(ev){
+    const rect = stick.getBoundingClientRect();
+    const t = (ev.touches?.[0]) || ev;
+    const x = t.clientX - rect.left - rect.width/2;
+    const y = t.clientY - rect.top  - rect.height/2;
+    const max = rect.width*0.38;
+    const len = Math.hypot(x,y);
+    let dx = x, dy = y;
+    if (len > max){ const s = max/len; dx*=s; dy*=s; }
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    const nx = (len>6? dx/max : 0), ny = (len>6? dy/max : 0);
+    joyDX = nx; joyDY = ny;
+  }
+  function joyEnd(){
+    joyActive=false; joyDX=0; joyDY=0; knob.style.transform='translate(-50%,-50%)';
+  }
+  stick.addEventListener('mousedown', e=>{ joyActive=true; joyFromEvent(e); });
+  stick.addEventListener('mousemove', e=>{ if(joyActive) joyFromEvent(e); });
+  window.addEventListener('mouseup', joyEnd);
+  stick.addEventListener('touchstart', e=>{ joyActive=true; joyFromEvent(e); }, {passive:false});
+  stick.addEventListener('touchmove',  e=>{ e.preventDefault(); if(joyActive) joyFromEvent(e); }, {passive:false});
+  stick.addEventListener('touchend',   joyEnd);
+
+  btnA.addEventListener('mousedown', ()=>pressAttack());
+  btnA.addEventListener('touchstart', e=>{ e.preventDefault(); pressAttack(); }, {passive:false});
+  btnB.addEventListener('mousedown', ()=>pressDash());
+  btnB.addEventListener('touchstart', e=>{ e.preventDefault(); pressDash(); }, {passive:false});
+
+  pauseBtn.addEventListener('click', togglePause);
+
+  // ===== Helpers =====
+  const rand = (a,b)=> a + Math.random()*(b-a);
+  const clamp = (v,min,max)=> Math.max(min, Math.min(max,v));
+  const lerp = (a,b,t)=> a+(b-a)*t;
+  const now = ()=> performance.now();
+
+  // ===== World / Entities =====
+  const GAME_W = 450, GAME_H = 800;
+  const GROUND = GAME_H - 40;
+
+  const state = {
+    running: true,
+    time: 0,
+    ko: 0,
+    wave: 1,
+    spawnTimer: 0,
+    spawnRate: 1.2, // seconds between spawns (decreases over time)
+    enemies: [],
+    effects: [],
+  };
+
+  const player = {
+    x: GAME_W/2, y: GROUND-60, r: 12,
+    vx: 0, vy: 0, speed: 170,
+    hp: 100, hpMax: 100, ifr: 0,
+    facing: 1, // 1 right, -1 left
+    attackCD: 0,
+    dashCD: 0, dashing: 0, dashSpeed: 420,
+    combo: 0, comboTimer: 0, comboWindow: 2.0,
+  };
+
+  function resetGame() {
+    state.ko=0; state.wave=1; state.spawnRate=1.2; state.enemies.length=0; state.effects.length=0;
+    player.x=GAME_W/2; player.y=GROUND-60; player.vx=0; player.vy=0;
+    player.hp=player.hpMax; player.ifr=0; player.attackCD=0; player.dashCD=0; player.dashing=0;
+    player.combo=0; player.comboTimer=0;
+    updateHUD();
+  }
+
+  // ===== Actions =====
+  function pressAttack(){
+    if (!state.running) return;
+    if (player.attackCD>0) return;
+    player.attackCD = 0.25; // seconds
+    // Attack arc: short-range melee in facing direction
+    const reach = 34;
+    const ax = player.x + player.facing* (player.r + reach);
+    const ay = player.y - 4;
+    // spawn a slash effect
+    spawnSlash(ax - player.facing*8, ay-8, player.facing);
+    // damage enemies in small box
+    const dmg = 20 + Math.floor(player.combo*0.5);
+    const hit = hitEnemies(ax, ay, 40, 26, dmg, 240*player.facing, -60);
+    if (hit>0) {
+      addCombo(hit);
+    } else {
+      // light whiff effect
+      state.effects.push({t:0, life:0.15, kind:'whiff', x:ax, y:ay});
+    }
+  }
+
+  function pressDash(){
+    if (!state.running) return;
+    if (player.dashCD>0) return;
+    player.dashing = 0.18; // seconds
+    player.dashCD = 0.7;
+    // tiny dash puff
+    state.effects.push({t:0, life:0.25, kind:'dash', x:player.x - player.facing*10, y:player.y});
+  }
+
+  function addCombo(n){
+    player.combo += n;
+    player.comboTimer = player.comboWindow;
+  }
+
+  function togglePause(){
+    state.running = !state.running;
+    overlay.hidden = state.running;
+    overlayText.textContent = 'Paused';
+    pauseBtn.textContent = state.running ? '⏸ Pause' : '▶ Resume';
+  }
+
+  // ===== Enemies =====
+  function spawnEnemy(){
+    // Spawn from top edges or sides
+    const edge = Math.floor(Math.random()*3);
+    let x, y;
+    if (edge===0){ x = Math.random()<0.5? -20 : GAME_W+20; y = rand(GROUND-180,GROUND-20); }
+    else { x = rand(20, GAME_W-20); y = -20; }
+    const hp = rand(28, 42) + state.wave*3;
+    state.enemies.push({
+      x, y, vx:0, vy:0, r:10,
+      hp, hpMax:hp, speed: rand(80, 110)+ state.wave*2,
+      knock:0, ifr:0, kind: (Math.random()<0.85?'grunt':'brute'),
+      tint: Math.random()<0.1? '#9b59b6' : '#a3e635',
+    });
+  }
+
+  function nextWave(){
+    state.wave++;
+    state.spawnRate = Math.max(0.5, state.spawnRate - 0.08);
+  }
+
+  function hitEnemies(cx, cy, w, h, dmg, kx, ky){
+    let hits = 0;
+    for (const e of state.enemies){
+      if (e.hp<=0) continue;
+      if (e.ifr>0) continue;
+      if (Math.abs(e.x - cx) < w/2 && Math.abs(e.y - cy) < h/2){
+        e.hp -= dmg;
+        e.ifr = 0.12;
+        e.knock = 0.12;
+        e.vx += kx * (0.5 + Math.random()*0.5);
+        e.vy += ky;
+        hits++;
+        // blood/crit puff
+        state.effects.push({t:0, life:0.25, kind:'hit', x:e.x, y:e.y});
+        if (e.hp<=0){
+          // KO!
+          state.ko++;
+          // pop effect + small heal on kill to keep flow
+          state.effects.push({t:0, life:0.35, kind:'ko', x:e.x, y:e.y});
+          if (player.hp<player.hpMax) player.hp = Math.min(player.hpMax, player.hp+4);
+        }
+      }
+    }
+    return hits;
+  }
+
+  // ===== Effects =====
+  function spawnSlash(x,y,dir){
+    state.effects.push({t:0, life:0.15, kind:'slash', x, y, dir});
+  }
+
+  // ===== Update & Draw =====
+  let last = now(), frame = 0, fpsTimer = 0, fpsCount = 0, fps = 60;
+
+  function update(dt){
+    state.time += dt;
+
+    // Input vector
+    let ix = 0, iy = 0;
+    if (joyDX || joyDY){ ix=joyDX; iy=joyDY; }
+    else {
+      ix = (keys.has('arrowright')||keys.has('d')) - (keys.has('arrowleft')||keys.has('a'));
+      iy = (keys.has('arrowdown')||keys.has('s')) - (keys.has('arrowup')||keys.has('w'));
+    }
+    const len = Math.hypot(ix,iy);
+    if (len>1e-3){ ix/=len; iy/=len; player.facing = (ix!==0? Math.sign(ix): player.facing); }
+
+    // Player cooldowns
+    player.attackCD = Math.max(0, player.attackCD - dt);
+    player.dashCD   = Math.max(0, player.dashCD   - dt);
+    player.ifr      = Math.max(0, player.ifr      - dt);
+    if (player.comboTimer>0){
+      player.comboTimer -= dt;
+      if (player.comboTimer<=0){ player.combo=0; player.comboTimer=0; }
+    }
+
+    // Player movement
+    const base = player.speed * (player.dashing>0 ? 2.2 : 1.0);
+    player.vx = ix * base;
+    player.vy = iy * base;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+    player.x = clamp(player.x, 16, GAME_W-16);
+    player.y = clamp(player.y, 16, GROUND);
+
+    if (player.dashing>0) player.dashing -= dt;
+
+    // Enemy spawn logic
+    state.spawnTimer -= dt;
+    if (state.spawnTimer<=0){
+      state.spawnTimer = state.spawnRate;
+      spawnEnemy();
+      // ramp waves lightly by KOs
+      if (state.ko>0 && state.ko%25===0) nextWave();
+    }
+
+    // Enemies AI & physics
+    for (const e of state.enemies){
+      if (e.hp<=0) continue;
+      const dx = player.x - e.x, dy = player.y - e.y;
+      const dlen = Math.hypot(dx,dy) || 1;
+      const nx = dx/dlen, ny = dy/dlen;
+
+      // simple seek unless knocked
+      if (e.knock>0){
+        e.knock -= dt;
+        e.vx *= 0.94; e.vy *= 0.94;
+      } else {
+        e.vx = nx * e.speed;
+        e.vy = ny * e.speed * 0.9;
+      }
+      e.ifr = Math.max(0, e.ifr - dt);
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      // bounds
+      e.x = clamp(e.x, 8, GAME_W-8);
+      e.y = clamp(e.y, 8, GROUND-2);
+
+      // contact damage (unless player dashing)
+      if (e.hp>0 && player.dashing<=0){
+        const dist = Math.hypot(player.x-e.x, player.y-e.y);
+        if (dist < player.r + e.r + 2){
+          if (player.ifr<=0){
+            const dmg = (e.kind==='brute'? 18:10);
+            player.hp -= dmg;
+            player.ifr = 0.6;
+            // knock player away
+            const k = 180;
+            player.x += (player.x - e.x)/Math.max(2, dist) * 12;
+            player.y += (player.y - e.y)/Math.max(2, dist) * 8;
+            // damage effect
+            state.effects.push({t:0, life:0.25, kind:'phit', x:player.x, y:player.y});
+            if (player.hp<=0){
+              player.hp=0;
+              state.running=false;
+              overlay.hidden=false;
+              overlayText.textContent = `You fell.\nKOs: ${state.ko}  •  Wave ${state.wave}\nTap ⟲ to restart (or press R)`;
+              pauseBtn.textContent = '▶ Resume';
+            }
+          }
+        }
+      }
+    }
+
+    // Cull dead enemies
+    state.enemies = state.enemies.filter(e => e.hp>0 || (state.effects.push({t:0, life:0.25, kind:'pop', x:e.x, y:e.y}), false));
+
+    // Effects
+    for (const fx of state.effects) fx.t += dt;
+    state.effects = state.effects.filter(fx => fx.t < fx.life);
+
+    // HUD bars
+    elHP.style.width = `${(player.hp/player.hpMax)*100}%`;
+    const comboPct = clamp(player.comboTimer/player.comboWindow,0,1);
+    elCombo.style.width = `${comboPct*100}%`;
+
+    updateHUD();
+  }
+
+  function updateHUD(){
+    elKO.textContent = state.ko|0;
+    elWave.textContent = state.wave|0;
+  }
+
+  function draw(){
+    // Background layers
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // subtle grid
+    ctx.globalAlpha = 0.12;
+    ctx.strokeStyle = '#182233';
+    ctx.lineWidth = 1;
+    for(let y=0; y<GAME_H; y+=40){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(GAME_W,y); ctx.stroke();
+    }
+    for(let x=0; x<GAME_W; x+=40){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,GAME_H); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Ground
+    ctx.fillStyle = '#0f1726';
+    ctx.fillRect(0, GROUND, GAME_W, GAME_H-GROUND);
+
+    // Draw enemies
+    for (const e of state.enemies){
+      if (e.hp<=0) continue;
+      // body
+      ctx.fillStyle = e.tint;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2); ctx.fill();
+      // tiny eye facing player
+      const ex = e.x + Math.sign(player.x - e.x)*3;
+      ctx.fillStyle = '#0b0f14';
+      ctx.fillRect(ex-1, e.y-2, 2, 2);
+      // hp pip
+      ctx.fillStyle = '#22324a';
+      ctx.fillRect(e.x-10, e.y-16, 20, 3);
+      ctx.fillStyle = '#69db7c';
+      ctx.fillRect(e.x-10, e.y-16, 20*(e.hp/e.hpMax), 3);
+      if (e.ifr>0){
+        ctx.globalAlpha = 0.5 + 0.5*Math.sin(state.time*40);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(e.x-e.r-2, e.y-e.r-2, (e.r*2)+4, (e.r*2)+4);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Player
+    // shadow
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(player.x, player.y+player.r, player.r*1.1, player.r*0.6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // body
+    ctx.fillStyle = player.ifr>0 ? '#ffd166' : '#93c5fd';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+    // visor/face
+    ctx.fillStyle = '#0b0f14';
+    ctx.fillRect(player.x + (player.facing*4) - 3, player.y-3, 6, 3);
+
+    // effects
+    for (const fx of state.effects){
+      const t = fx.t / fx.life;
+      if (fx.kind==='slash'){
+        ctx.save();
+        ctx.translate(fx.x, fx.y);
+        ctx.scale(fx.dir, 1);
+        ctx.globalAlpha = 0.6*(1-t);
+        ctx.strokeStyle = '#bfe3ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-4, -8);
+        ctx.quadraticCurveTo(14, -2, 18, 10);
+        ctx.stroke();
+        ctx.restore();
+      } else if (fx.kind==='hit'){
+        ctx.globalAlpha = 0.8*(1-t);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, 6+6*(1-t), 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (fx.kind==='phit'){
+        ctx.globalAlpha = 0.7*(1-t);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(fx.x-10*(1-t), fx.y-10*(1-t), 20*(1-t*0.6), 20*(1-t*0.6));
+        ctx.globalAlpha = 1;
+      } else if (fx.kind==='ko' || fx.kind==='pop'){
+        ctx.globalAlpha = 0.6*(1-t);
+        ctx.fillStyle = fx.kind==='ko' ? '#34d399' : '#94a3b8';
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, 12*t, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (fx.kind==='dash'){
+        ctx.globalAlpha = 0.5*(1-t);
+        ctx.fillStyle = '#a5b4fc';
+        ctx.fillRect(fx.x-6, fx.y-3, 24, 6);
+        ctx.globalAlpha = 1;
+      } else if (fx.kind==='whiff'){
+        ctx.globalAlpha = 0.4*(1-t);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, 8+8*t, 0, Math.PI*2); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Foreground vignette
+    const grd = ctx.createLinearGradient(0,0,0,GAME_H);
+    grd.addColorStop(0,'rgba(0,0,0,0.35)');
+    grd.addColorStop(0.08,'rgba(0,0,0,0.0)');
+    grd.addColorStop(0.92,'rgba(0,0,0,0.0)');
+    grd.addColorStop(1,'rgba(0,0,0,0.35)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,GAME_W,GAME_H);
+
+    // Ground line
+    ctx.strokeStyle = '#1b2740';
+    ctx.beginPath(); ctx.moveTo(0,GROUND+0.5); ctx.lineTo(GAME_W,GROUND+0.5); ctx.stroke();
+  }
+
+  function loop(){
+    const t = now();
+    let dt = (t - last)/1000;
+    last = t;
+
+    // clamp dt to avoid big jumps on tab switch
+    dt = Math.min(dt, 0.05);
+
+    if (state.running){
+      update(dt);
+    }
+    draw();
+
+    // fps calc
+    fpsTimer += dt;
+    fpsCount++;
+    if (fpsTimer >= 0.5){
+      fps = Math.round(fpsCount / fpsTimer);
+      elFPS.textContent = fps;
+      fpsTimer = 0; fpsCount = 0;
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Restart on R or overlay tap
+  window.addEventListener('keydown', e=>{
+    if (e.key.toLowerCase()==='r' && !state.running){ resetGame(); state.running=true; overlay.hidden=true; pauseBtn.textContent='⏸ Pause'; }
+  });
+  overlay.addEventListener('click', ()=>{
+    if (!state.running){ resetGame(); state.running=true; overlay.hidden=true; pauseBtn.textContent='⏸ Pause'; }
+  });
+
+  // Start
+  resize(); resetGame(); last = now(); requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
