@@ -25,7 +25,8 @@
   .bar > i{display:block;height:100%;}
   .hp   > i{background:linear-gradient(90deg,#34d399,#059669);}
   .combo> i{background:linear-gradient(90deg,#76a7ff,#22d3ee);}
-  .pause{cursor:pointer}
+  .pause{cursor:pointer; transition: background-color 0.15s, color 0.15s;}
+  .pause:hover{background:rgba(255,255,255,.12); color:#76a7ff;}
   /* Touch controls */
   .controls{pointer-events:none; position:absolute; inset:0;}
   .joy, .buttons{position:absolute; bottom:18px; display:flex; align-items:center;}
@@ -38,7 +39,10 @@
     background:rgba(255,255,255,.15); border:1px solid var(--line);}
   .btn{pointer-events:auto; width:72px;height:72px;border-radius:50%;
     background:rgba(255,255,255,.08); border:1px solid var(--line);
-    display:grid; place-items:center; user-select:none;}
+    display:grid; place-items:center; user-select:none;
+    transition: background-color 0.15s, transform 0.1s, border-color 0.15s;}
+  .btn:hover{background:rgba(255,255,255,.12); border-color:#76a7ff;}
+  .btn:active{transform:scale(0.95); background:rgba(255,255,255,.15);}
   .btn b{font-size:18px; opacity:.9}
   .hint{position:absolute; bottom:150px; right:18px; color:var(--muted); font-size:12px;}
   /* Overlay messages */
@@ -206,8 +210,8 @@
     time: 0,
     ko: 0,
     wave: 1,
-    spawnTimer: 0,
-    spawnRate: 1.2, // seconds between spawns (decreases over time)
+    spawnTimer: 2.0, // Start with more breathing room
+    spawnRate: 1.8, // Slower initial spawn rate for better new player experience
     enemies: [],
     effects: [],
     // Screen shake for juicy feedback
@@ -225,9 +229,10 @@
   };
 
   function resetGame() {
-    state.ko=0; state.wave=1; state.spawnRate=1.2; state.enemies.length=0; state.effects.length=0;
+    state.ko=0; state.wave=1; state.spawnRate=1.8; state.enemies.length=0; state.effects.length=0;
     state.shakeX=0; state.shakeY=0; state.shakeIntensity=0; state.shakeDuration=0;
     state.showWelcome = false; // Hide welcome when restarting
+    state.spawnTimer = 2.0; // Give player time to orient
     player.x=GAME_W/2; player.y=GROUND-60; player.vx=0; player.vy=0;
     player.hp=player.hpMax; player.ifr=0; player.attackCD=0; player.dashCD=0; player.dashing=0;
     player.combo=0; player.comboTimer=0;
@@ -268,6 +273,14 @@
   function addCombo(n){
     player.combo += n;
     player.comboTimer = player.comboWindow;
+    // Show combo text for satisfying feedback
+    if (player.combo > 1) {
+      state.effects.push({
+        t:0, life:0.8, kind:'combo', 
+        x:player.x, y:player.y - 30,
+        combo: player.combo
+      });
+    }
   }
 
   function togglePause(){
@@ -305,7 +318,13 @@
 
   function nextWave(){
     state.wave++;
-    state.spawnRate = Math.max(0.5, state.spawnRate - 0.08);
+    state.spawnRate = Math.max(0.6, state.spawnRate - 0.12);
+    // Show wave progression for satisfying feedback
+    state.effects.push({
+      t:0, life:2.0, kind:'wave', 
+      x:GAME_W/2, y:GAME_H/2,
+      wave: state.wave
+    });
   }
 
   function hitEnemies(cx, cy, w, h, dmg, kx, ky){
@@ -322,6 +341,17 @@
         hits++;
         // blood/crit puff
         state.effects.push({t:0, life:0.25, kind:'hit', x:e.x, y:e.y});
+        // Add impact sparks for more satisfying feedback
+        for (let i = 0; i < 3; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 80 + Math.random() * 40;
+          state.effects.push({
+            t:0, life:0.3, kind:'spark', 
+            x:e.x, y:e.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed
+          });
+        }
         if (e.hp<=0){
           // KO!
           state.ko++;
@@ -507,9 +537,23 @@
     // Draw enemies
     for (const e of state.enemies){
       if (e.hp<=0) continue;
+      // Shadow for depth
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r + 2, e.r * 0.8, e.r * 0.4, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+      
       // body
       ctx.fillStyle = e.tint;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2); ctx.fill();
+      
+      // Special enemy indicator for brutes
+      if (e.kind === 'brute') {
+        ctx.strokeStyle = '#9b59b6';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 1, 0, Math.PI*2); ctx.stroke();
+      }
+      
       // tiny eye facing player
       const ex = e.x + Math.sign(player.x - e.x)*3;
       ctx.fillStyle = '#0b0f14';
@@ -534,8 +578,17 @@
     ctx.beginPath(); ctx.ellipse(player.x, player.y+player.r, player.r*1.1, player.r*0.6, 0, 0, Math.PI*2); ctx.fill();
     ctx.globalAlpha = 1;
 
-    // body
-    ctx.fillStyle = player.ifr>0 ? '#ffd166' : '#93c5fd';
+    // body with dash glow effect
+    if (player.dashing > 0) {
+      // Dash glow
+      const dashAlpha = player.dashing / 0.18;
+      ctx.globalAlpha = 0.3 * dashAlpha;
+      ctx.fillStyle = '#a5b4fc';
+      ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 4, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    
+    ctx.fillStyle = player.ifr>0 ? '#ffd166' : (player.dashing>0 ? '#a5b4fc' : '#93c5fd');
     ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
     // visor/face
     ctx.fillStyle = '#0b0f14';
@@ -548,13 +601,23 @@
         ctx.save();
         ctx.translate(fx.x, fx.y);
         ctx.scale(fx.dir, 1);
-        ctx.globalAlpha = 0.6*(1-t);
+        const alpha = 0.8*(1-t);
+        ctx.globalAlpha = alpha;
+        
+        // Main slash
         ctx.strokeStyle = '#bfe3ff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.moveTo(-4, -8);
-        ctx.quadraticCurveTo(14, -2, 18, 10);
+        ctx.moveTo(-6, -10);
+        ctx.quadraticCurveTo(16, -3, 20, 12);
         ctx.stroke();
+        
+        // Inner glow
+        ctx.globalAlpha = alpha * 0.5;
+        ctx.strokeStyle = '#e0f2fe';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
         ctx.restore();
       } else if (fx.kind==='hit'){
         ctx.globalAlpha = 0.8*(1-t);
@@ -582,6 +645,48 @@
         ctx.strokeStyle = '#94a3b8';
         ctx.beginPath(); ctx.arc(fx.x, fx.y, 8+8*t, 0, Math.PI*2); ctx.stroke();
         ctx.globalAlpha = 1;
+      } else if (fx.kind==='spark'){
+        // Moving particle sparks
+        fx.x += fx.vx * dt;
+        fx.y += fx.vy * dt;
+        fx.vy += 200 * dt; // gravity
+        fx.vx *= 0.98; // air resistance
+        
+        ctx.globalAlpha = 0.8 * (1-t);
+        ctx.fillStyle = t < 0.5 ? '#fbbf24' : '#f87171';
+        const size = 3 * (1-t);
+        ctx.fillRect(fx.x - size/2, fx.y - size/2, size, size);
+        ctx.globalAlpha = 1;
+      } else if (fx.kind==='combo'){
+        // Floating combo text
+        fx.y -= 30 * dt; // float upward
+        const scale = 1 + 0.3 * (1 - t);
+        ctx.save();
+        ctx.translate(fx.x, fx.y);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = 0.9 * (1-t);
+        ctx.fillStyle = player.combo >= 5 ? '#fbbf24' : '#34d399';
+        ctx.font = 'bold 16px ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${fx.combo}x COMBO!`, 0, 0);
+        ctx.restore();
+      } else if (fx.kind==='wave'){
+        // Wave announcement
+        const fadeIn = Math.min(1, fx.t / 0.3);
+        const fadeOut = fx.t > 1.5 ? (2.0 - fx.t) / 0.5 : 1;
+        const alpha = fadeIn * fadeOut;
+        
+        ctx.save();
+        ctx.translate(fx.x, fx.y);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#76a7ff';
+        ctx.font = 'bold 24px ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`WAVE ${fx.wave}`, 0, 0);
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.font = '14px ui-monospace, monospace';
+        ctx.fillText('INCOMING!', 0, 25);
+        ctx.restore();
       }
     }
 
