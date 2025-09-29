@@ -153,6 +153,11 @@
         <span class="debug-label">Effects</span>
         <span id="debugEffectCount" class="debug-value">0</span>
       </div>
+      <div class="debug-row">
+        <span class="debug-label">Max Effects</span>
+        <input type="range" id="maxEffectsSlider" class="debug-slider" min="10" max="200" value="50">
+        <span id="debugMaxEffects" class="debug-value">50</span>
+      </div>
     </div>
 
     <div class="debug-section">
@@ -265,6 +270,7 @@
   const spawnEnemyBtn = document.getElementById('spawnEnemyBtn');
   const killAllEnemiesBtn = document.getElementById('killAllEnemiesBtn');
   const enemySpeedSlider = document.getElementById('enemySpeedSlider');
+  const maxEffectsSlider = document.getElementById('maxEffectsSlider');
   const stressTestBtn = document.getElementById('stressTestBtn');
   const performanceTestBtn = document.getElementById('performanceTestBtn');
   const exportStateBtn = document.getElementById('exportStateBtn');
@@ -276,6 +282,7 @@
   const debugKO = document.getElementById('debugKO');
   const debugEnemyCount = document.getElementById('debugEnemyCount');
   const debugEffectCount = document.getElementById('debugEffectCount');
+  const debugMaxEffects = document.getElementById('debugMaxEffects');
   const debugPlayerHP = document.getElementById('debugPlayerHP');
   const debugPlayerSpeed = document.getElementById('debugPlayerSpeed');
   const debugSpawnRate = document.getElementById('debugSpawnRate');
@@ -411,6 +418,15 @@
     debugEnemySpeed.textContent = newSpeed;
   });
 
+  maxEffectsSlider.addEventListener('input', (e) => {
+    state.maxEffects = parseInt(e.target.value);
+    debugMaxEffects.textContent = state.maxEffects;
+    // If current effects exceed new limit, trim them
+    if (state.effects.length > state.maxEffects) {
+      state.effects = state.effects.slice(-state.maxEffects);
+    }
+  });
+
   stressTestBtn.addEventListener('click', () => {
     // Spawn 50 enemies for stress testing
     for (let i = 0; i < 50; i++) {
@@ -440,6 +456,7 @@
     debugKO.textContent = state.ko;
     debugEnemyCount.textContent = state.enemies.length;
     debugEffectCount.textContent = state.effects.length;
+    debugMaxEffects.textContent = state.maxEffects;
     debugPlayerHP.textContent = player.hp;
     debugPlayerSpeed.textContent = player.speed;
     debugSpawnRate.textContent = state.spawnRate.toFixed(1);
@@ -449,6 +466,7 @@
     playerSpeedSlider.value = player.speed;
     playerInvincibleToggle.checked = player.invincible || false;
     spawnRateSlider.value = state.spawnRate;
+    maxEffectsSlider.value = state.maxEffects;
   }
 
   // ===== Debug Testing Functions =====
