@@ -932,12 +932,14 @@
     // Effects
     for (const fx of state.effects) {
       fx.t += dt;
-      // Update spark positions in update function where dt is available
+      // Update positions in update function where dt is available
       if (fx.kind === 'spark') {
         fx.x += fx.vx * dt;
         fx.y += fx.vy * dt;
         fx.vy += 200 * dt; // gravity
         fx.vx *= 0.98; // air resistance
+      } else if (fx.kind === 'combo') {
+        fx.y -= 30 * dt; // float upward
       }
     }
     state.effects = state.effects.filter(fx => fx.t < fx.life);
@@ -1114,13 +1116,12 @@
         ctx.globalAlpha = 1;
       } else if (fx.kind==='combo'){
         // Floating combo text
-        fx.y -= 30 * dt; // float upward
         const scale = 1 + 0.3 * (1 - t);
         ctx.save();
         ctx.translate(fx.x, fx.y);
         ctx.scale(scale, scale);
         ctx.globalAlpha = 0.9 * (1-t);
-        ctx.fillStyle = player.combo >= 5 ? '#fbbf24' : '#34d399';
+        ctx.fillStyle = fx.combo >= 5 ? '#fbbf24' : '#34d399';
         ctx.font = 'bold 16px ui-monospace, monospace';
         ctx.textAlign = 'center';
         ctx.fillText(`${fx.combo}x COMBO!`, 0, 0);
