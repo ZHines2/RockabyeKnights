@@ -49,6 +49,30 @@
   .center{position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;}
   .center[hidden]{display:none;}
   .msg{background:rgba(0,0,0,.4); border:1px solid var(--line); padding:10px 14px; border-radius:8px;}
+  
+  /* Debug Panel */
+  .debug-panel{
+    position:fixed; top:10px; right:10px; width:280px; max-height:90vh; overflow-y:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px;
+    font-size:12px; z-index:1000; display:none;
+  }
+  .debug-panel.visible{display:block;}
+  .debug-section{margin-bottom:12px; border-bottom:1px solid var(--line); padding-bottom:8px;}
+  .debug-section:last-child{border-bottom:none; margin-bottom:0;}
+  .debug-title{font-weight:bold; color:var(--accent); margin-bottom:6px; font-size:13px;}
+  .debug-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:8px;}
+  .debug-label{color:var(--muted); flex-shrink:0;}
+  .debug-value{color:var(--ink); font-family:monospace; background:rgba(255,255,255,0.05); 
+    padding:2px 6px; border-radius:3px; flex-grow:1; text-align:right;}
+  .debug-input{background:rgba(255,255,255,0.1); border:1px solid var(--line); border-radius:3px;
+    padding:3px 6px; color:var(--ink); font-size:11px; width:60px;}
+  .debug-button{background:var(--accent); color:white; border:none; border-radius:3px;
+    padding:4px 8px; cursor:pointer; font-size:11px; margin:2px;}
+  .debug-button:hover{background:#5a8cff;}
+  .debug-button.danger{background:var(--bad);}
+  .debug-button.danger:hover{background:#dc2626;}
+  .debug-slider{width:100%; margin:4px 0;}
+  .debug-checkbox{margin-right:6px;}
 </style>
 </head>
 <body>
@@ -89,7 +113,96 @@
         <div class="btn" id="btnA" title="Attack (J)"><b>A</b></div>
         <div class="btn" id="btnB" title="Dash (K)"><b>B</b></div>
       </div>
-      <div class="hint">J = Attack • K = Dash • P = Pause • G = Debug</div>
+      <div class="hint">J = Attack • K = Dash • P = Pause • G = Debug • H = Debug Panel</div>
+    </div>
+  </div>
+
+  <!-- Debug Panel -->
+  <div id="debugPanel" class="debug-panel">
+    <div class="debug-section">
+      <div class="debug-title">🛠️ Debug Controls</div>
+      <div class="debug-row">
+        <label class="debug-label">Debug Mode</label>
+        <input type="checkbox" id="debugModeToggle" class="debug-checkbox">
+      </div>
+      <div class="debug-row">
+        <button id="resetGameBtn" class="debug-button">Reset Game</button>
+        <button id="clearEnemiesBtn" class="debug-button danger">Clear Enemies</button>
+      </div>
+    </div>
+
+    <div class="debug-section">
+      <div class="debug-title">📊 Game State</div>
+      <div class="debug-row">
+        <span class="debug-label">FPS</span>
+        <span id="debugFPS" class="debug-value">60</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Wave</span>
+        <span id="debugWave" class="debug-value">1</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">KOs</span>
+        <span id="debugKO" class="debug-value">0</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Enemies</span>
+        <span id="debugEnemyCount" class="debug-value">0</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Effects</span>
+        <span id="debugEffectCount" class="debug-value">0</span>
+      </div>
+    </div>
+
+    <div class="debug-section">
+      <div class="debug-title">🎮 Player Controls</div>
+      <div class="debug-row">
+        <span class="debug-label">HP</span>
+        <input type="range" id="playerHPSlider" class="debug-slider" min="0" max="100" value="100">
+        <span id="debugPlayerHP" class="debug-value">100</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Speed</span>
+        <input type="range" id="playerSpeedSlider" class="debug-slider" min="50" max="500" value="170">
+        <span id="debugPlayerSpeed" class="debug-value">170</span>
+      </div>
+      <div class="debug-row">
+        <label class="debug-label">Invincible</label>
+        <input type="checkbox" id="playerInvincibleToggle" class="debug-checkbox">
+      </div>
+    </div>
+
+    <div class="debug-section">
+      <div class="debug-title">👹 Enemy Controls</div>
+      <div class="debug-row">
+        <span class="debug-label">Spawn Rate</span>
+        <input type="range" id="spawnRateSlider" class="debug-slider" min="0.1" max="5" step="0.1" value="1.8">
+        <span id="debugSpawnRate" class="debug-value">1.8</span>
+      </div>
+      <div class="debug-row">
+        <button id="spawnEnemyBtn" class="debug-button">Spawn Enemy</button>
+        <button id="killAllEnemiesBtn" class="debug-button danger">Kill All</button>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Enemy Speed</span>
+        <input type="range" id="enemySpeedSlider" class="debug-slider" min="10" max="300" value="100">
+        <span id="debugEnemySpeed" class="debug-value">100</span>
+      </div>
+    </div>
+
+    <div class="debug-section">
+      <div class="debug-title">🧪 Testing Tools</div>
+      <div class="debug-row">
+        <button id="stressTestBtn" class="debug-button">Stress Test (50 enemies)</button>
+      </div>
+      <div class="debug-row">
+        <button id="performanceTestBtn" class="debug-button">Performance Test</button>
+      </div>
+      <div class="debug-row">
+        <button id="exportStateBtn" class="debug-button">Export State</button>
+        <button id="importStateBtn" class="debug-button">Import State</button>
+      </div>
     </div>
   </div>
 
@@ -140,6 +253,34 @@
   const overlay = document.getElementById('overlay');
   const overlayText = document.getElementById('overlayText');
 
+  // ===== Debug Panel Elements =====
+  const debugPanel = document.getElementById('debugPanel');
+  const debugModeToggle = document.getElementById('debugModeToggle');
+  const resetGameBtn = document.getElementById('resetGameBtn');
+  const clearEnemiesBtn = document.getElementById('clearEnemiesBtn');
+  const playerHPSlider = document.getElementById('playerHPSlider');
+  const playerSpeedSlider = document.getElementById('playerSpeedSlider');
+  const playerInvincibleToggle = document.getElementById('playerInvincibleToggle');
+  const spawnRateSlider = document.getElementById('spawnRateSlider');
+  const spawnEnemyBtn = document.getElementById('spawnEnemyBtn');
+  const killAllEnemiesBtn = document.getElementById('killAllEnemiesBtn');
+  const enemySpeedSlider = document.getElementById('enemySpeedSlider');
+  const stressTestBtn = document.getElementById('stressTestBtn');
+  const performanceTestBtn = document.getElementById('performanceTestBtn');
+  const exportStateBtn = document.getElementById('exportStateBtn');
+  const importStateBtn = document.getElementById('importStateBtn');
+
+  // Debug panel value displays
+  const debugFPS = document.getElementById('debugFPS');
+  const debugWave = document.getElementById('debugWave');
+  const debugKO = document.getElementById('debugKO');
+  const debugEnemyCount = document.getElementById('debugEnemyCount');
+  const debugEffectCount = document.getElementById('debugEffectCount');
+  const debugPlayerHP = document.getElementById('debugPlayerHP');
+  const debugPlayerSpeed = document.getElementById('debugPlayerSpeed');
+  const debugSpawnRate = document.getElementById('debugSpawnRate');
+  const debugEnemySpeed = document.getElementById('debugEnemySpeed');
+
   // ===== Input (Keyboard) =====
   const keys = new Set();
   window.addEventListener('keydown', e=>{
@@ -155,6 +296,7 @@
     if (e.key.toLowerCase()==='j') pressAttack();
     if (e.key.toLowerCase()==='k') pressDash();
     if (e.key.toLowerCase()==='g') toggleDebugMode();
+    if (e.key.toLowerCase()==='h') toggleDebugPanel(); // H for Help/Debug panel
   });
   window.addEventListener('keyup', e=> keys.delete(e.key.toLowerCase()));
 
@@ -217,6 +359,194 @@
   });
 
   pauseBtn.addEventListener('click', togglePause);
+
+  // ===== Debug Panel Event Listeners =====
+  debugModeToggle.addEventListener('change', (e) => {
+    state.debugMode = e.target.checked;
+    updateHUD();
+  });
+
+  resetGameBtn.addEventListener('click', () => {
+    resetGame();
+    state.running = true;
+    overlay.hidden = true;
+    pauseBtn.textContent = '⏸ Pause';
+  });
+
+  clearEnemiesBtn.addEventListener('click', () => {
+    state.enemies.length = 0;
+  });
+
+  playerHPSlider.addEventListener('input', (e) => {
+    player.hp = parseInt(e.target.value);
+    debugPlayerHP.textContent = player.hp;
+  });
+
+  playerSpeedSlider.addEventListener('input', (e) => {
+    player.speed = parseInt(e.target.value);
+    debugPlayerSpeed.textContent = player.speed;
+  });
+
+  playerInvincibleToggle.addEventListener('change', (e) => {
+    player.invincible = e.target.checked;
+  });
+
+  spawnRateSlider.addEventListener('input', (e) => {
+    state.spawnRate = parseFloat(e.target.value);
+    debugSpawnRate.textContent = state.spawnRate.toFixed(1);
+  });
+
+  spawnEnemyBtn.addEventListener('click', () => {
+    spawnEnemy();
+  });
+
+  killAllEnemiesBtn.addEventListener('click', () => {
+    state.enemies.forEach(e => e.hp = 0);
+  });
+
+  enemySpeedSlider.addEventListener('input', (e) => {
+    const newSpeed = parseInt(e.target.value);
+    // Apply to existing enemies
+    state.enemies.forEach(enemy => enemy.speed = newSpeed);
+    debugEnemySpeed.textContent = newSpeed;
+  });
+
+  stressTestBtn.addEventListener('click', () => {
+    // Spawn 50 enemies for stress testing
+    for (let i = 0; i < 50; i++) {
+      spawnEnemy();
+    }
+  });
+
+  performanceTestBtn.addEventListener('click', () => {
+    performanceTest();
+  });
+
+  exportStateBtn.addEventListener('click', () => {
+    exportGameState();
+  });
+
+  importStateBtn.addEventListener('click', () => {
+    importGameState();
+  });
+
+  // Update debug panel values
+  function updateDebugPanel() {
+    if (!debugPanel.classList.contains('visible')) return;
+    
+    debugModeToggle.checked = state.debugMode;
+    debugFPS.textContent = Math.round(fps);
+    debugWave.textContent = state.wave;
+    debugKO.textContent = state.ko;
+    debugEnemyCount.textContent = state.enemies.length;
+    debugEffectCount.textContent = state.effects.length;
+    debugPlayerHP.textContent = player.hp;
+    debugPlayerSpeed.textContent = player.speed;
+    debugSpawnRate.textContent = state.spawnRate.toFixed(1);
+    debugEnemySpeed.textContent = enemySpeedSlider.value;
+    
+    playerHPSlider.value = player.hp;
+    playerSpeedSlider.value = player.speed;
+    playerInvincibleToggle.checked = player.invincible || false;
+    spawnRateSlider.value = state.spawnRate;
+  }
+
+  // ===== Debug Testing Functions =====
+  function performanceTest() {
+    console.log('=== PERFORMANCE TEST START ===');
+    const startTime = performance.now();
+    let frameCount = 0;
+    let minFPS = Infinity;
+    let maxFPS = 0;
+    
+    // Spawn many enemies for stress test
+    for (let i = 0; i < 30; i++) {
+      spawnEnemy();
+    }
+    
+    const testDuration = 5000; // 5 seconds
+    const testInterval = setInterval(() => {
+      frameCount++;
+      const currentFPS = Math.round(fps);
+      minFPS = Math.min(minFPS, currentFPS);
+      maxFPS = Math.max(maxFPS, currentFPS);
+    }, 16); // ~60fps
+    
+    setTimeout(() => {
+      clearInterval(testInterval);
+      const endTime = performance.now();
+      const totalTime = endTime - startTime;
+      const avgFPS = (frameCount / (totalTime / 1000)).toFixed(1);
+      
+      console.log(`=== PERFORMANCE TEST RESULTS ===`);
+      console.log(`Duration: ${(totalTime/1000).toFixed(1)}s`);
+      console.log(`Average FPS: ${avgFPS}`);
+      console.log(`Min FPS: ${minFPS}`);
+      console.log(`Max FPS: ${maxFPS}`);
+      console.log(`Enemies: ${state.enemies.length}`);
+      console.log(`Effects: ${state.effects.length}`);
+      console.log('=== TEST COMPLETE ===');
+      
+      // Clean up
+      state.enemies.length = 0;
+      state.effects.length = 0;
+    }, testDuration);
+  }
+
+  function exportGameState() {
+    const exportData = {
+      player: { ...player },
+      state: { ...state, enemies: [...state.enemies], effects: [...state.effects] },
+      timestamp: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rockabye-knights-state-${Date.now()}.json`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+    console.log('Game state exported');
+  }
+
+  function importGameState() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const importData = JSON.parse(e.target.result);
+          
+          // Restore player state
+          Object.assign(player, importData.player);
+          
+          // Restore game state (careful with references)
+          Object.assign(state, importData.state);
+          state.enemies = [...importData.state.enemies];
+          state.effects = [...importData.state.effects];
+          
+          updateHUD();
+          updateDebugPanel();
+          console.log('Game state imported from', importData.timestamp);
+        } catch (error) {
+          console.error('Failed to import game state:', error);
+        }
+      };
+      reader.readAsText(file);
+    };
+    
+    input.click();
+  }
 
   // ===== Helpers =====
   const rand = (a,b)=> a + Math.random()*(b-a);
@@ -321,6 +651,15 @@
     state.debugMode = !state.debugMode;
     updateHUD();
     console.log('Debug mode:', state.debugMode ? 'ON (Single enemy)' : 'OFF (Normal spawning)');
+  }
+
+  function toggleDebugPanel(){
+    if (debugPanel.classList.contains('visible')) {
+      debugPanel.classList.remove('visible');
+    } else {
+      debugPanel.classList.add('visible');
+      updateDebugPanel(); // Update values when opening
+    }
   }
 
   function togglePause(){
@@ -496,8 +835,8 @@
       e.x = clamp(e.x, 8, GAME_W-8);
       e.y = clamp(e.y, 8, GROUND-2);
 
-      // contact damage (unless player dashing)
-      if (e.hp>0 && player.dashing<=0 && !state.debugMode){ // Skip damage in debug mode
+      // contact damage (unless player dashing or invincible)
+      if (e.hp>0 && player.dashing<=0 && !state.debugMode && !player.invincible){ // Skip damage in debug mode or if invincible
         const dist = Math.hypot(player.x-e.x, player.y-e.y);
         if (dist < player.r + e.r + 2){
           if (player.ifr<=0){
@@ -578,6 +917,7 @@
     elCombo.style.width = `${comboPct*100}%`;
 
     updateHUD();
+    updateDebugPanel();
   }
 
   function updateHUD(){
@@ -808,7 +1148,7 @@
       
       ctx.fillStyle = '#9aa7b3';
       ctx.font = '12px ui-monospace, monospace';
-      ctx.fillText('P - Pause • G - Toggle Debug', GAME_W/2, GAME_H/2 + 60);
+      ctx.fillText('P - Pause • G - Toggle Debug • H - Debug Panel', GAME_W/2, GAME_H/2 + 60);
       
       // Start prompt with pulse effect
       const pulse = 0.7 + 0.3 * Math.sin(state.time * 4);
