@@ -60,6 +60,7 @@
         <div class="stat">
           <span class="pill">KOs <b id="ko">0</b></span>
           <span class="pill">Wave <b id="wave">1</b></span>
+          <span class="pill" id="debugIndicator" style="background: rgba(251, 191, 36, 0.2); border-color: #fbbf24;">DEBUG</span>
           <span class="pill">FPS <b id="fps">60</b></span>
         </div>
         <div style="display:flex; gap:10px; align-items:center">
@@ -88,7 +89,7 @@
         <div class="btn" id="btnA" title="Attack (J)"><b>A</b></div>
         <div class="btn" id="btnB" title="Dash (K)"><b>B</b></div>
       </div>
-      <div class="hint">J = Attack • K = Dash • P = Pause</div>
+      <div class="hint">J = Attack • K = Dash • P = Pause • G = Debug</div>
     </div>
   </div>
 
@@ -134,6 +135,7 @@
   const elFPS = document.getElementById('fps');
   const elHP = document.getElementById('hpbar');
   const elCombo = document.getElementById('combobar');
+  const elDebugIndicator = document.getElementById('debugIndicator');
   const pauseBtn = document.getElementById('pause');
   const overlay = document.getElementById('overlay');
   const overlayText = document.getElementById('overlayText');
@@ -152,6 +154,7 @@
     if (e.key.toLowerCase()==='p') togglePause();
     if (e.key.toLowerCase()==='j') pressAttack();
     if (e.key.toLowerCase()==='k') pressDash();
+    if (e.key.toLowerCase()==='g') toggleDebugMode();
   });
   window.addEventListener('keyup', e=> keys.delete(e.key.toLowerCase()));
 
@@ -228,6 +231,7 @@
   const state = {
     running: true,
     showWelcome: true, // Show welcome screen initially
+    debugMode: true, // DEBUG: Single enemy spawning mode
     time: 0,
     ko: 0,
     wave: 1,
@@ -254,6 +258,7 @@
     state.shakeX=0; state.shakeY=0; state.shakeIntensity=0; state.shakeDuration=0;
     state.showWelcome = false; // Hide welcome when restarting
     state.spawnTimer = 2.0; // Give player time to orient
+    // DEBUG MODE: Keep debug mode setting across resets
     player.x=GAME_W/2; player.y=GROUND-60; player.vx=0; player.vy=0;
     player.hp=player.hpMax; player.ifr=0; player.attackCD=0; player.dashCD=0; player.dashing=0;
     player.combo=0; player.comboTimer=0;
@@ -302,6 +307,12 @@
         combo: player.combo
       });
     }
+  }
+
+  function toggleDebugMode(){
+    state.debugMode = !state.debugMode;
+    updateHUD();
+    console.log('Debug mode:', state.debugMode ? 'ON (Single enemy)' : 'OFF (Normal spawning)');
   }
 
   function togglePause(){
@@ -374,6 +385,9 @@
         if (e.hp<=0){
           // KO!
           state.ko++;
+          if (state.debugMode) {
+            console.log('Enemy KOd! Total KOs:', state.ko, 'Enemy was at:', e.x, e.y);
+          }
           // pop effect + small heal on kill to keep flow
           state.effects.push({t:0, life:0.35, kind:'ko', x:e.x, y:e.y});
           addScreenShake(3, 0.1); // Light shake for enemy defeat
@@ -437,7 +451,17 @@
     state.spawnTimer -= dt;
     if (state.spawnTimer<=0){
       state.spawnTimer = state.spawnRate;
-      spawnEnemy();
+      
+      // DEBUG MODE: Only spawn if no living enemies exist
+      if (state.debugMode) {
+        const livingEnemies = state.enemies.filter(e => e.hp > 0);
+        if (livingEnemies.length === 0) {
+          spawnEnemy();
+        }
+      } else {
+        spawnEnemy();
+      }
+      
       // ramp waves lightly by KOs
       if (state.ko>0 && state.ko%25===0) nextWave();
     }
@@ -469,7 +493,7 @@
         const dist = Math.hypot(player.x-e.x, player.y-e.y);
         if (dist < player.r + e.r + 2){
           if (player.ifr<=0){
-            const dmg = (e.kind==='brute'? 18:10);
+            const dmg = state.debugMode ? 5 : (e.kind==='brute'? 18:10); // Reduced damage in debug mode
             player.hp -= dmg;
             player.ifr = 0.6;
             // knock player away
@@ -500,13 +524,21 @@
     }
 
     // Cull dead enemies
+    const beforeCount = state.enemies.length;
     state.enemies = state.enemies.filter(e => {
       if (e && e.hp > 0) return true;
       if (e && e.x !== undefined && e.y !== undefined) {
         state.effects.push({t:0, life:0.25, kind:'pop', x:e.x, y:e.y});
+        if (state.debugMode) {
+          console.log('Enemy died at:', e.x, e.y, 'Effects count:', state.effects.length);
+        }
       }
       return false;
     });
+    const afterCount = state.enemies.length;
+    if (state.debugMode && beforeCount !== afterCount) {
+      console.log('Enemies before:', beforeCount, 'after:', afterCount, 'living enemies:', state.enemies.filter(e => e.hp > 0).length);
+    }
 
     // Effects
     for (const fx of state.effects) {
@@ -543,6 +575,10 @@
   function updateHUD(){
     elKO.textContent = state.ko|0;
     elWave.textContent = state.wave|0;
+    // Show/hide debug indicator
+    if (elDebugIndicator) {
+      elDebugIndicator.style.display = state.debugMode ? 'inline-flex' : 'none';
+    }
   }
 
   function draw(){
@@ -751,10 +787,20 @@
       // Instructions
       ctx.fillStyle = '#e9f2ff';
       ctx.font = '16px ui-monospace, monospace';
-      ctx.fillText('WASD / Arrow Keys - Move', GAME_W/2, GAME_H/2 - 30);
-      ctx.fillText('J / A Button - Attack', GAME_W/2, GAME_H/2 - 5);
-      ctx.fillText('K / B Button - Dash', GAME_W/2, GAME_H/2 + 20);
-      ctx.fillText('P - Pause', GAME_W/2, GAME_H/2 + 45);
+      ctx.fillText('WASD / Arrow Keys - Move', GAME_W/2, GAME_H/2 - 40);
+      ctx.fillText('J / A Button - Attack', GAME_W/2, GAME_H/2 - 15);
+      ctx.fillText('K / B Button - Dash', GAME_W/2, GAME_H/2 + 10);
+      
+      // Debug mode indicator
+      if (state.debugMode) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 14px ui-monospace, monospace';
+        ctx.fillText('DEBUG MODE: Single Enemy', GAME_W/2, GAME_H/2 + 35);
+      }
+      
+      ctx.fillStyle = '#9aa7b3';
+      ctx.font = '12px ui-monospace, monospace';
+      ctx.fillText('P - Pause • G - Toggle Debug', GAME_W/2, GAME_H/2 + 60);
       
       // Start prompt with pulse effect
       const pulse = 0.7 + 0.3 * Math.sin(state.time * 4);
