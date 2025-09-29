@@ -47,6 +47,7 @@
   .hint{position:absolute; bottom:150px; right:18px; color:var(--muted); font-size:12px;}
   /* Overlay messages */
   .center{position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;}
+  .center[hidden]{display:none;}
   .msg{background:rgba(0,0,0,.4); border:1px solid var(--line); padding:10px 14px; border-radius:8px;}
 </style>
 </head>
@@ -307,9 +308,7 @@
     if (state.showWelcome) return; // Can't pause during welcome
     state.running = !state.running;
     overlay.hidden = state.running;
-    if (state.running) {
-      overlayText.textContent = 'Paused';
-    } else {
+    if (!state.running) {
       overlayText.innerHTML = `
         <div style="text-align:center;">
           <div style="color:#76a7ff;font-size:18px;margin-bottom:8px;">⏸ Game Paused</div>
