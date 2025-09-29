@@ -1120,7 +1120,7 @@
         ctx.translate(fx.x, fx.y);
         ctx.scale(scale, scale);
         ctx.globalAlpha = 0.9 * (1-t);
-        ctx.fillStyle = player.combo >= 5 ? '#fbbf24' : '#34d399';
+        ctx.fillStyle = fx.combo >= 5 ? '#fbbf24' : '#34d399';
         ctx.font = 'bold 16px ui-monospace, monospace';
         ctx.textAlign = 'center';
         ctx.fillText(`${fx.combo}x COMBO!`, 0, 0);
