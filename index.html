@@ -284,7 +284,9 @@
     spawnSlash(ax - player.facing*8, ay-8, player.facing);
     // damage enemies in small box
     const dmg = 20 + Math.floor(player.combo*0.5);
-    const hit = hitEnemies(ax, ay, 40, 26, dmg, 240*player.facing, -60);
+    const hitWidth = state.debugMode ? 100 : 40;  // Much wider hit area in debug mode
+    const hitHeight = state.debugMode ? 80 : 26;  // Much taller hit area in debug mode
+    const hit = hitEnemies(ax, ay, hitWidth, hitHeight, dmg, 240*player.facing, -60);
     if (hit>0) {
       addCombo(hit);
     } else {
