@@ -253,6 +253,12 @@
     combo: 0, comboTimer: 0, comboWindow: 2.0,
   };
 
+  // DEBUG: Expose variables globally for debugging
+  if (typeof window !== 'undefined') {
+    window.gameState = state;
+    window.gamePlayer = player;
+  }
+
   function resetGame() {
     state.ko=0; state.wave=1; state.spawnRate=1.8; state.enemies.length=0; state.effects.length=0;
     state.shakeX=0; state.shakeY=0; state.shakeIntensity=0; state.shakeDuration=0;
@@ -271,7 +277,7 @@
     if (player.attackCD>0) return;
     player.attackCD = 0.25; // seconds
     // Attack arc: short-range melee in facing direction
-    const reach = 34;
+    const reach = state.debugMode ? 50 : 34; // Increased reach in debug mode
     const ax = player.x + player.facing* (player.r + reach);
     const ay = player.y - 4;
     // spawn a slash effect
@@ -489,7 +495,7 @@
       e.y = clamp(e.y, 8, GROUND-2);
 
       // contact damage (unless player dashing)
-      if (e.hp>0 && player.dashing<=0){
+      if (e.hp>0 && player.dashing<=0 && !state.debugMode){ // Skip damage in debug mode
         const dist = Math.hypot(player.x-e.x, player.y-e.y);
         if (dist < player.r + e.r + 2){
           if (player.ifr<=0){
